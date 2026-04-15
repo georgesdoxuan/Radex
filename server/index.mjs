@@ -41,7 +41,7 @@ const newsSources = [
 ];
 const REQUEST_TIMEOUT_MS = 25000;
 const MAX_BRIEF_POINTS = 5;
-const IMPORTANT_SCORE_THRESHOLD = Number(process.env.IMPORTANT_SCORE_THRESHOLD ?? 70);
+const IMPORTANT_SCORE_THRESHOLD = Number(process.env.IMPORTANT_SCORE_THRESHOLD ?? 30);
 const SIDE_PANEL_TOP_LIMIT = 8;
 const SIDE_PANEL_HISTORY_LIMIT = 60;
 const runStatus = {

@@ -68,7 +68,7 @@ const emptyReport: Report = {
   sourceCompany: 'Extia',
   brief2Min: [],
   sidePanel: {
-    scoreThreshold: 70,
+    scoreThreshold: 30,
     topSignals: [],
     history: [],
   },
@@ -255,7 +255,7 @@ function App() {
         obj.sidePanel && typeof obj.sidePanel === 'object'
           ? {
               scoreThreshold:
-                typeof obj.sidePanel.scoreThreshold === 'number' ? obj.sidePanel.scoreThreshold : 70,
+                typeof obj.sidePanel.scoreThreshold === 'number' ? obj.sidePanel.scoreThreshold : 30,
               topSignals: Array.isArray(obj.sidePanel.topSignals) ? obj.sidePanel.topSignals : [],
               history: Array.isArray(obj.sidePanel.history) ? obj.sidePanel.history : [],
             }
@@ -445,7 +445,7 @@ function App() {
     return sectorOk && sizeOk && searchOk;
   });
 
-  const sideThreshold = report.sidePanel?.scoreThreshold ?? 70;
+  const sideThreshold = report.sidePanel?.scoreThreshold ?? 30;
   const fallbackTopSignals = report.sources
     .map((source) => ({
       sourceName: source.sourceName,
@@ -462,7 +462,22 @@ function App() {
     .sort((a, b) => b.relevanceScore - a.relevanceScore)
     .slice(0, 8);
   const topSignals = (report.sidePanel?.topSignals?.length ? report.sidePanel.topSignals : fallbackTopSignals).slice(0, 8);
-  const historySignals = (report.sidePanel?.history || []).slice(0, 40);
+  const fallbackHistorySignals = report.sources
+    .map((source) => ({
+      sourceName: source.sourceName,
+      title: source.latestTitle,
+      url: source.latestUrl,
+      publishedAt: source.latestPublishedAt,
+      lastSeenAt: source.lastSeenAt,
+      relevanceScore:
+        typeof source.relevanceScore === 'number' && source.relevanceScore > 0
+          ? source.relevanceScore
+          : fallbackScoreFromLevel(source.relevance),
+    }))
+    .sort((a, b) => new Date(b.lastSeenAt || 0).getTime() - new Date(a.lastSeenAt || 0).getTime())
+    .filter((item, index, arr) => arr.findIndex((candidate) => candidate.url === item.url) === index)
+    .slice(0, 40);
+  const historySignals = (report.sidePanel?.history?.length ? report.sidePanel.history : fallbackHistorySignals).slice(0, 40);
 
   return (
     <main className="layout">
