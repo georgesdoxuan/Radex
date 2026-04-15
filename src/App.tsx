@@ -225,6 +225,7 @@ function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sidePanelOpen, setSidePanelOpen] = useState(true);
+  const [sidePanelTab, setSidePanelTab] = useState<'critical' | 'history'>('critical');
   const fetchJsonWithTimeout = async (url: string, init?: RequestInit, timeoutMs = 120000) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -767,43 +768,62 @@ function App() {
 
       {sidePanelOpen ? (
         <aside className="side-panel">
-          <section className="card">
-            <h3>Actus critiques</h3>
-            <p>Seuil auto: score &gt;= {sideThreshold}</p>
-            <ul className="side-list">
-              {topSignals.length ? (
-                topSignals.map((item) => (
-                  <li key={`${item.sourceName}-${item.url}`} className="side-list-item">
-                    <p className="side-list-title">{item.sourceName} - {item.title}</p>
-                    <p className="side-list-meta">Score {Math.round(item.relevanceScore)} | {formatDateTime(item.publishedAt || item.lastSeenAt)}</p>
-                    <a href={item.url} target="_blank" rel="noreferrer">
-                      Ouvrir l&apos;article
-                    </a>
-                  </li>
-                ))
-              ) : (
-                <li className="side-list-item">Aucune actu au-dessus du seuil pour le moment.</li>
-              )}
-            </ul>
+          <section className="card side-panel-nav">
+            <button
+              type="button"
+              className={sidePanelTab === 'critical' ? 'active' : ''}
+              onClick={() => setSidePanelTab('critical')}
+            >
+              Actus critiques
+            </button>
+            <button
+              type="button"
+              className={sidePanelTab === 'history' ? 'active' : ''}
+              onClick={() => setSidePanelTab('history')}
+            >
+              Historique
+            </button>
           </section>
-          <section className="card">
-            <h3>Historique (sans doublons)</h3>
-            <ul className="side-list">
-              {historySignals.length ? (
-                historySignals.map((item) => (
-                  <li key={`history-${item.sourceName}-${item.url}`} className="side-list-item">
-                    <p className="side-list-title">{item.sourceName} - {item.title}</p>
-                    <p className="side-list-meta">{formatDateTime(item.publishedAt || item.lastSeenAt)}</p>
-                    <a href={item.url} target="_blank" rel="noreferrer">
-                      Voir
-                    </a>
-                  </li>
-                ))
-              ) : (
-                <li className="side-list-item">Pas encore d&apos;historique.</li>
-              )}
-            </ul>
-          </section>
+          {sidePanelTab === 'critical' ? (
+            <section className="card">
+              <h3>Actus critiques</h3>
+              <p>Seuil auto: score &gt;= {sideThreshold}</p>
+              <ul className="side-list">
+                {topSignals.length ? (
+                  topSignals.map((item) => (
+                    <li key={`${item.sourceName}-${item.url}`} className="side-list-item">
+                      <p className="side-list-title">{item.sourceName} - {item.title}</p>
+                      <p className="side-list-meta">Score {Math.round(item.relevanceScore)} | {formatDateTime(item.publishedAt || item.lastSeenAt)}</p>
+                      <a href={item.url} target="_blank" rel="noreferrer">
+                        Ouvrir l&apos;article
+                      </a>
+                    </li>
+                  ))
+                ) : (
+                  <li className="side-list-item">Aucune actu au-dessus du seuil pour le moment.</li>
+                )}
+              </ul>
+            </section>
+          ) : (
+            <section className="card">
+              <h3>Historique (sans doublons)</h3>
+              <ul className="side-list">
+                {historySignals.length ? (
+                  historySignals.map((item) => (
+                    <li key={`history-${item.sourceName}-${item.url}`} className="side-list-item">
+                      <p className="side-list-title">{item.sourceName} - {item.title}</p>
+                      <p className="side-list-meta">{formatDateTime(item.publishedAt || item.lastSeenAt)}</p>
+                      <a href={item.url} target="_blank" rel="noreferrer">
+                        Voir
+                      </a>
+                    </li>
+                  ))
+                ) : (
+                  <li className="side-list-item">Pas encore d&apos;historique.</li>
+                )}
+              </ul>
+            </section>
+          )}
         </aside>
       ) : null}
     </main>
