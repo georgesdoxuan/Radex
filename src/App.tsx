@@ -1,7 +1,23 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { Fragment } from 'react';
-import { FiActivity, FiBell, FiCalendar, FiDatabase, FiExternalLink, FiEye, FiPlay, FiRefreshCw, FiSearch, FiSidebar } from 'react-icons/fi';
+import {
+  FiActivity,
+  FiBarChart2,
+  FiBell,
+  FiCalendar,
+  FiCheckSquare,
+  FiChevronLeft,
+  FiChevronRight,
+  FiDatabase,
+  FiExternalLink,
+  FiEye,
+  FiGrid,
+  FiPlay,
+  FiRefreshCw,
+  FiSearch,
+  FiSliders,
+} from 'react-icons/fi';
 
 type Report = {
   generatedAt: string;
@@ -224,8 +240,8 @@ function App() {
   const [sizeFilter, setSizeFilter] = useState('all');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sidePanelOpen, setSidePanelOpen] = useState(true);
-  const [sidePanelTab, setSidePanelTab] = useState<'critical' | 'history'>('critical');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarView, setSidebarView] = useState<'dashboard' | 'critical' | 'history'>('dashboard');
   const fetchJsonWithTimeout = async (url: string, init?: RequestInit, timeoutMs = 120000) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -481,7 +497,52 @@ function App() {
   const historySignals = (report.sidePanel?.history?.length ? report.sidePanel.history : fallbackHistorySignals).slice(0, 40);
 
   return (
-    <main className="layout">
+    <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+      <aside className="app-sidebar">
+        <div className="sidebar-brand">
+          <img src="/radex-logo.png" alt="Radex logo" className="brand-logo" />
+          {!sidebarCollapsed ? <strong>Radex</strong> : null}
+        </div>
+        <button
+          type="button"
+          className="sidebar-collapse-btn"
+          onClick={() => setSidebarCollapsed((prev) => !prev)}
+          aria-label={sidebarCollapsed ? 'Etendre le menu' : 'Compacter le menu'}
+        >
+          {sidebarCollapsed ? <FiChevronRight /> : <FiChevronLeft />}
+        </button>
+        <nav className="sidebar-nav">
+          <button
+            type="button"
+            className={`sidebar-nav-item ${sidebarView === 'dashboard' ? 'active' : ''}`}
+            onClick={() => setSidebarView('dashboard')}
+          >
+            <FiGrid />
+            {!sidebarCollapsed ? <span>Dashboard</span> : null}
+          </button>
+          <button
+            type="button"
+            className={`sidebar-nav-item ${sidebarView === 'critical' ? 'active' : ''}`}
+            onClick={() => setSidebarView('critical')}
+          >
+            <FiSliders />
+            {!sidebarCollapsed ? <span>Actus critiques</span> : null}
+          </button>
+          <button
+            type="button"
+            className={`sidebar-nav-item ${sidebarView === 'history' ? 'active' : ''}`}
+            onClick={() => setSidebarView('history')}
+          >
+            <FiCheckSquare />
+            {!sidebarCollapsed ? <span>Historique</span> : null}
+          </button>
+          <div className="sidebar-nav-item muted">
+            <FiBarChart2 />
+            {!sidebarCollapsed ? <span>Analytics</span> : null}
+          </div>
+        </nav>
+      </aside>
+      <main className="layout">
       <header className="header">
         <div>
           <h1 className="brand-title">
@@ -506,14 +567,53 @@ function App() {
             <FiEye />
             {runningMode === 'test' ? 'Mode test...' : 'Mode test (dernier article)'}
           </button>
-          <button onClick={() => setSidePanelOpen((prev) => !prev)}>
-            <FiSidebar />
-            {sidePanelOpen ? 'Masquer panneau' : 'Ouvrir panneau'}
-          </button>
         </div>
       </header>
 
       {error ? <p className="error">Erreur: {error}</p> : null}
+      {sidebarView === 'critical' ? (
+        <section className="card side-inline-card">
+          <h3>Actus critiques</h3>
+          <p>Seuil auto: score &gt;= {sideThreshold}</p>
+          <ul className="side-list">
+            {topSignals.length ? (
+              topSignals.map((item) => (
+                <li key={`${item.sourceName}-${item.url}`} className="side-list-item">
+                  <p className="side-list-title">{item.sourceName} - {item.title}</p>
+                  <p className="side-list-meta">
+                    Score {Math.round(item.relevanceScore)} | {formatDateTime(item.publishedAt || item.lastSeenAt)}
+                  </p>
+                  <a href={item.url} target="_blank" rel="noreferrer">
+                    Ouvrir l&apos;article
+                  </a>
+                </li>
+              ))
+            ) : (
+              <li className="side-list-item">Aucune actu au-dessus du seuil pour le moment.</li>
+            )}
+          </ul>
+        </section>
+      ) : null}
+      {sidebarView === 'history' ? (
+        <section className="card side-inline-card">
+          <h3>Historique (sans doublons)</h3>
+          <ul className="side-list">
+            {historySignals.length ? (
+              historySignals.map((item) => (
+                <li key={`history-${item.sourceName}-${item.url}`} className="side-list-item">
+                  <p className="side-list-title">{item.sourceName} - {item.title}</p>
+                  <p className="side-list-meta">{formatDateTime(item.publishedAt || item.lastSeenAt)}</p>
+                  <a href={item.url} target="_blank" rel="noreferrer">
+                    Voir
+                  </a>
+                </li>
+              ))
+            ) : (
+              <li className="side-list-item">Pas encore d&apos;historique.</li>
+            )}
+          </ul>
+        </section>
+      ) : null}
       {runningMode !== null ? (
         <section className="card loader-card">
           <div className="radar-loader" aria-label="Chargement en cours">
@@ -765,68 +865,8 @@ function App() {
           </tbody>
         </table>
       </section>
-
-      {sidePanelOpen ? (
-        <aside className="side-panel">
-          <section className="card side-panel-nav">
-            <button
-              type="button"
-              className={sidePanelTab === 'critical' ? 'active' : ''}
-              onClick={() => setSidePanelTab('critical')}
-            >
-              Actus critiques
-            </button>
-            <button
-              type="button"
-              className={sidePanelTab === 'history' ? 'active' : ''}
-              onClick={() => setSidePanelTab('history')}
-            >
-              Historique
-            </button>
-          </section>
-          {sidePanelTab === 'critical' ? (
-            <section className="card">
-              <h3>Actus critiques</h3>
-              <p>Seuil auto: score &gt;= {sideThreshold}</p>
-              <ul className="side-list">
-                {topSignals.length ? (
-                  topSignals.map((item) => (
-                    <li key={`${item.sourceName}-${item.url}`} className="side-list-item">
-                      <p className="side-list-title">{item.sourceName} - {item.title}</p>
-                      <p className="side-list-meta">Score {Math.round(item.relevanceScore)} | {formatDateTime(item.publishedAt || item.lastSeenAt)}</p>
-                      <a href={item.url} target="_blank" rel="noreferrer">
-                        Ouvrir l&apos;article
-                      </a>
-                    </li>
-                  ))
-                ) : (
-                  <li className="side-list-item">Aucune actu au-dessus du seuil pour le moment.</li>
-                )}
-              </ul>
-            </section>
-          ) : (
-            <section className="card">
-              <h3>Historique (sans doublons)</h3>
-              <ul className="side-list">
-                {historySignals.length ? (
-                  historySignals.map((item) => (
-                    <li key={`history-${item.sourceName}-${item.url}`} className="side-list-item">
-                      <p className="side-list-title">{item.sourceName} - {item.title}</p>
-                      <p className="side-list-meta">{formatDateTime(item.publishedAt || item.lastSeenAt)}</p>
-                      <a href={item.url} target="_blank" rel="noreferrer">
-                        Voir
-                      </a>
-                    </li>
-                  ))
-                ) : (
-                  <li className="side-list-item">Pas encore d&apos;historique.</li>
-                )}
-              </ul>
-            </section>
-          )}
-        </aside>
-      ) : null}
-    </main>
+      </main>
+    </div>
   );
 }
 
