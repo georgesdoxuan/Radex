@@ -92,6 +92,7 @@ const emptyReport: Report = {
 };
 
 const sourceProfiles: Record<string, CompanyProfile> = {
+  Alten: { sector: 'Ingénierie & IT', size: 'Grand Groupe' },
   Aubay: { sector: 'ESN généraliste', size: 'ETI' },
   Astek: { sector: 'Ingénierie & IT', size: 'ETI' },
   Devoteam: { sector: 'Cloud, Data & Cybersécurité', size: 'ETI' },

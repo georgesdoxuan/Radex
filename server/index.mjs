@@ -26,6 +26,7 @@ const pool = dbUrl
 
 const sourceCompany = 'Extia';
 const newsSources = [
+  { name: 'Alten', url: 'https://www.alten.fr/news-evenements-alten-france/#evenements' },
   { name: 'Aubay', url: 'https://blog.aubay.com/' },
   { name: 'Astek', url: 'https://astekgroup.fr/category/actualites/' },
   { name: 'Devoteam', url: 'https://www.devoteam.com/fr/news-and-pr/' },
