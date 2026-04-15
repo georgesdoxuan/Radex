@@ -12,6 +12,7 @@ dotenv.config({ path: '.env.local', override: true });
 
 const app = express();
 const port = Number(process.env.PORT ?? 8787);
+const isNetlifyRuntime = process.env.NETLIFY === 'true' || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
 const { Pool } = pg;
 const dbUrl = process.env.SUPABASE_DB_URL;
 const pool = dbUrl
@@ -1221,14 +1222,29 @@ app.get('/api/run-status', (_req, res) => {
 app.get('/api/run-jobs/:id', (req, res) => {
   const job = runJobs.get(req.params.id);
   if (!job) {
+    if (isNetlifyRuntime) {
+      return res.status(404).json({
+        error: 'Job not found',
+        hint: 'En mode Netlify Functions, utilise la reponse directe de /api/run-analysis ou /api/run-test.',
+      });
+    }
     return res.status(404).json({ error: 'Job not found' });
   }
   return res.json(job);
 });
 
 app.post('/api/run-analysis', async (_req, res) => {
+  if (isNetlifyRuntime) {
+    try {
+      const report = await runNewsMonitoring({ testMode: false });
+      return res.status(200).json({ queued: false, status: 'completed', report });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return res.status(500).json({ error: message, status: 'failed' });
+    }
+  }
   const jobId = enqueueRunJob({ mode: 'manual', testMode: false });
-  res.status(202).json({ queued: true, jobId });
+  return res.status(202).json({ queued: true, jobId });
 });
 
 app.post('/api/cron/run', async (req, res) => {
@@ -1237,18 +1253,37 @@ app.post('/api/cron/run', async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
+  if (isNetlifyRuntime) {
+    try {
+      const report = await runNewsMonitoring({ testMode: false });
+      return res.status(200).json({ ok: true, queued: false, status: 'completed', report });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return res.status(500).json({ ok: false, status: 'failed', error: message });
+    }
+  }
+
   const jobId = enqueueRunJob({ mode: 'manual', testMode: false });
   return res.status(202).json({ ok: true, queued: true, jobId });
 });
 
 app.post('/api/run-test', async (_req, res) => {
+  if (isNetlifyRuntime) {
+    try {
+      const report = await runNewsMonitoring({ testMode: true });
+      return res.status(200).json({ queued: false, status: 'completed', report });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return res.status(500).json({ error: message, status: 'failed' });
+    }
+  }
   const jobId = enqueueRunJob({ mode: 'test', testMode: true });
-  res.status(202).json({ queued: true, jobId });
+  return res.status(202).json({ queued: true, jobId });
 });
 
 export { app };
 
-if (process.env.NETLIFY !== 'true') {
+if (!isNetlifyRuntime) {
   app.listen(port, () => {
     console.log(`API server ready on http://localhost:${port}`);
   });
