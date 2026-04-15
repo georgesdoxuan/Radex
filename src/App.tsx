@@ -170,6 +170,12 @@ function App() {
     const contentType = response.headers.get('content-type') || '';
     if (!text) return {};
     if (!contentType.includes('application/json')) {
+      if (response.status === 504) {
+        return {
+          error:
+            "Timeout Netlify (HTTP 504) : le run est trop long pour une requete synchrone. Recharge le dashboard dans quelques secondes.",
+        };
+      }
       return { error: `Réponse API non JSON (HTTP ${response.status}). Vérifie VITE_API_BASE_URL.` };
     }
     try {
@@ -285,15 +291,58 @@ function App() {
     setRunningMode(mode);
     setError('');
     try {
+      const previousGeneratedAt = report.generatedAt || '';
+      const pollDashboardUntilUpdated = async () => {
+        const startedAt = Date.now();
+        const timeoutMs = 5 * 60 * 1000;
+        while (Date.now() - startedAt < timeoutMs) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          const { response: dashboardRes, data: dashboardData } = await fetchJsonWithTimeout('/api/dashboard', undefined, 45000);
+          if (!dashboardRes.ok) continue;
+          const nextReport = toReport(dashboardData);
+          setReport(nextReport);
+          if (nextReport.generatedAt && nextReport.generatedAt !== previousGeneratedAt) {
+            return;
+          }
+        }
+        throw new Error('Run lance en background mais resultat non disponible pour le moment. Recharge dans 1 minute.');
+      };
+
+      const bgEndpoint =
+        mode === 'manual'
+          ? '/.netlify/functions/run-analysis-background'
+          : '/.netlify/functions/run-test-background';
+
+      const { response: bgResponse, data: bgData } = await fetchJsonWithTimeout(bgEndpoint, { method: 'POST' }, 45000);
+      if (bgResponse.ok || bgResponse.status === 202) {
+        await pollDashboardUntilUpdated();
+        return;
+      }
+
       const endpoint = mode === 'manual' ? '/api/run-analysis' : '/api/run-test';
       const { response, data } = await fetchJsonWithTimeout(endpoint, { method: 'POST' });
       if (!response.ok) {
-        throw new Error((data as { error?: string }).error || 'Erreur API run');
+        if (response.status === 504) {
+          throw new Error('Timeout Netlify (504): la function longue depasse la limite. Le mode background doit etre utilise.');
+        }
+        throw new Error(
+          (bgData as { error?: string }).error ||
+            (data as { error?: string }).error ||
+            'Erreur API run',
+        );
+      }
+
+      const directReport = (data as { report?: unknown; queued?: boolean }).report;
+      const isQueued = (data as { queued?: boolean }).queued !== false;
+      if (!isQueued && directReport) {
+        setReport(toReport(directReport));
+        return;
       }
 
       const jobId = (data as { jobId?: string }).jobId;
       if (!jobId) {
-        throw new Error('Job ID manquant.');
+        await loadDashboard();
+        return;
       }
 
       const startedAt = Date.now();
@@ -307,6 +356,10 @@ function App() {
           report?: unknown;
         };
         if (!jobRes.ok) {
+          if (jobRes.status === 404 && (jobData.error || '').toLowerCase().includes('job not found')) {
+            await loadDashboard();
+            return;
+          }
           throw new Error(jobData.error || 'Erreur suivi job');
         }
         if (jobData.status === 'completed') {
@@ -320,7 +373,13 @@ function App() {
       throw new Error('Le job a dépassé le temps limite.');
     } catch (err) {
       const isAbort = err instanceof Error && err.name === 'AbortError';
-      setError(isAbort ? 'Le run a dépassé le temps limite. Réessaie.' : err instanceof Error ? err.message : 'Erreur inconnue');
+      setError(
+        isAbort
+          ? 'Le run a depasse le temps limite. Reessaie.'
+          : err instanceof Error
+            ? err.message
+            : 'Erreur inconnue',
+      );
     } finally {
       setRunningMode(null);
     }
