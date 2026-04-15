@@ -4,6 +4,16 @@
   functions = "netlify/functions"
 
 [[redirects]]
+  from = "/api/run-analysis"
+  to = "/.netlify/functions/run-analysis-background"
+  status = 200
+
+[[redirects]]
+  from = "/api/run-test"
+  to = "/.netlify/functions/run-test-background"
+  status = 200
+
+[[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api"
   status = 200

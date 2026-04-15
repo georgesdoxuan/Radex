@@ -1281,7 +1281,7 @@ app.post('/api/run-test', async (_req, res) => {
   return res.status(202).json({ queued: true, jobId });
 });
 
-export { app };
+export { app, runNewsMonitoring };
 
 if (!isNetlifyRuntime) {
   app.listen(port, () => {
