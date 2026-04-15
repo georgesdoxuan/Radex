@@ -1246,6 +1246,10 @@ app.post('/api/run-test', async (_req, res) => {
   res.status(202).json({ queued: true, jobId });
 });
 
-app.listen(port, () => {
-  console.log(`API server ready on http://localhost:${port}`);
-});
+export { app };
+
+if (process.env.NETLIFY !== 'true') {
+  app.listen(port, () => {
+    console.log(`API server ready on http://localhost:${port}`);
+  });
+}

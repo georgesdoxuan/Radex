@@ -45,3 +45,13 @@ Au demarrage, le serveur cree automatiquement les tables:
 ## Plus tard: automation
 
 Le endpoint `POST /api/cron/run` existe deja, mais tu peux rester en run manuel pour le moment.
+
+## Deploiement Netlify (front + API)
+
+- Le projet est configure pour executer aussi l'API Express en Netlify Functions (`netlify/functions/api.mjs`).
+- Le fichier `netlify.toml` redirige `/api/*` vers la function.
+- Variables d'environnement a definir dans Netlify:
+  - `OPENAI_API_KEY`
+  - `SUPABASE_DB_URL`
+  - `CRON_SECRET`
+- Ne pas definir `PORT` dans Netlify (peut declencher un faux positif du scanner de secrets).
