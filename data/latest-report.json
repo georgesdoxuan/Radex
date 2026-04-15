@@ -1,0 +1,97 @@
+{
+  "generatedAt": "2026-04-14T09:17:21.916Z",
+  "sourceCompany": "Extia",
+  "strategicSummary": "Analyse locale generee sans OpenAI. Ajoute OPENAI_API_KEY dans .env pour produire une synthese IA complete.",
+  "competitors": [
+    {
+      "name": "CapGemini",
+      "positioning": "ESN orientee transformation digitale et conseil.",
+      "strengths": [
+        "Couverture internationale",
+        "Portefeuille grands comptes"
+      ],
+      "weaknesses": [
+        "Differenciation percue moderee",
+        "Concurrence forte sur les talents"
+      ],
+      "recentSignals": [
+        "Renforcement IA/GenAI",
+        "Nouvelles alliances cloud"
+      ],
+      "threatLevel": "High",
+      "score": 55
+    },
+    {
+      "name": "Astek",
+      "positioning": "ESN orientee transformation digitale et conseil.",
+      "strengths": [
+        "Couverture internationale",
+        "Portefeuille grands comptes"
+      ],
+      "weaknesses": [
+        "Differenciation percue moderee",
+        "Concurrence forte sur les talents"
+      ],
+      "recentSignals": [
+        "Renforcement IA/GenAI",
+        "Nouvelles alliances cloud"
+      ],
+      "threatLevel": "High",
+      "score": 61
+    },
+    {
+      "name": "Devoteam",
+      "positioning": "ESN orientee transformation digitale et conseil.",
+      "strengths": [
+        "Couverture internationale",
+        "Portefeuille grands comptes"
+      ],
+      "weaknesses": [
+        "Differenciation percue moderee",
+        "Concurrence forte sur les talents"
+      ],
+      "recentSignals": [
+        "Renforcement IA/GenAI",
+        "Nouvelles alliances cloud"
+      ],
+      "threatLevel": "Medium",
+      "score": 67
+    },
+    {
+      "name": "Wavestone",
+      "positioning": "ESN orientee transformation digitale et conseil.",
+      "strengths": [
+        "Couverture internationale",
+        "Portefeuille grands comptes"
+      ],
+      "weaknesses": [
+        "Differenciation percue moderee",
+        "Concurrence forte sur les talents"
+      ],
+      "recentSignals": [
+        "Renforcement IA/GenAI",
+        "Nouvelles alliances cloud"
+      ],
+      "threatLevel": "Medium",
+      "score": 73
+    },
+    {
+      "name": "Aubay",
+      "positioning": "ESN orientee transformation digitale et conseil.",
+      "strengths": [
+        "Couverture internationale",
+        "Portefeuille grands comptes"
+      ],
+      "weaknesses": [
+        "Differenciation percue moderee",
+        "Concurrence forte sur les talents"
+      ],
+      "recentSignals": [
+        "Renforcement IA/GenAI",
+        "Nouvelles alliances cloud"
+      ],
+      "threatLevel": "Medium",
+      "score": 79
+    }
+  ]
+}
