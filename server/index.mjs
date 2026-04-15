@@ -41,6 +41,9 @@ const newsSources = [
 ];
 const REQUEST_TIMEOUT_MS = 25000;
 const MAX_BRIEF_POINTS = 5;
+const IMPORTANT_SCORE_THRESHOLD = Number(process.env.IMPORTANT_SCORE_THRESHOLD ?? 70);
+const SIDE_PANEL_TOP_LIMIT = 8;
+const SIDE_PANEL_HISTORY_LIMIT = 60;
 const runStatus = {
   isRunning: false,
   mode: null,
@@ -58,6 +61,11 @@ const fallbackReport = () => ({
   sourceCompany,
   strategicSummary: 'Mode local sans connexion Supabase active.',
   brief2Min: ['Aucune donnée exploitable pour le brief 2 minutes.'],
+  sidePanel: {
+    scoreThreshold: IMPORTANT_SCORE_THRESHOLD,
+    topSignals: [],
+    history: [],
+  },
   sources: newsSources.map((item) => ({
     sourceName: item.name,
     sourceUrl: item.url,
@@ -858,6 +866,19 @@ const ensureDb = async () => {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS source_articles (
+      id BIGSERIAL PRIMARY KEY,
+      source_id BIGINT NOT NULL REFERENCES monitored_sources(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      article_url TEXT NOT NULL,
+      published_at TIMESTAMPTZ NULL,
+      summary TEXT NOT NULL,
+      first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(source_id, title)
+    );
+  `);
 
   await pool.query(`
     ALTER TABLE source_articles
@@ -898,17 +919,20 @@ const ensureDb = async () => {
   `);
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS source_articles (
-      id BIGSERIAL PRIMARY KEY,
-      source_id BIGINT NOT NULL REFERENCES monitored_sources(id) ON DELETE CASCADE,
-      title TEXT NOT NULL,
-      article_url TEXT NOT NULL,
-      published_at TIMESTAMPTZ NULL,
-      summary TEXT NOT NULL,
-      first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE(source_id, title)
-    );
+    ALTER TABLE source_articles
+    DROP CONSTRAINT IF EXISTS source_articles_source_id_title_key;
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_source_articles_source_url
+    ON source_articles(source_id, article_url);
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_source_articles_relevance_score
+    ON source_articles(relevance_score DESC);
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_source_articles_last_seen_at
+    ON source_articles(last_seen_at DESC);
   `);
 
   for (const source of newsSources) {
@@ -918,6 +942,82 @@ const ensureDb = async () => {
       [source.name, source.url],
     );
   }
+};
+
+const buildSidePanelDataFromRows = (rows) => {
+  const withScore = rows.map((row) => ({
+    sourceName: row.sourceName || 'Source',
+    title: row.latestTitle || 'Sans titre',
+    url: row.latestUrl || '#',
+    publishedAt: row.latestPublishedAt || null,
+    lastSeenAt: row.lastSeenAt || null,
+    relevanceScore: Number.isFinite(Number(row.relevanceScore)) ? Math.max(0, Math.min(100, Number(row.relevanceScore))) : 0,
+  }));
+
+  const topSignals = withScore
+    .filter((item) => item.title !== 'Source indisponible' && item.relevanceScore >= IMPORTANT_SCORE_THRESHOLD)
+    .sort((a, b) => b.relevanceScore - a.relevanceScore)
+    .slice(0, SIDE_PANEL_TOP_LIMIT);
+
+  const seen = new Set();
+  const history = withScore
+    .sort((a, b) => new Date(b.lastSeenAt || 0).getTime() - new Date(a.lastSeenAt || 0).getTime())
+    .filter((item) => {
+      const key = `${item.sourceName}::${item.url}`;
+      if (!item.url || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, SIDE_PANEL_HISTORY_LIMIT);
+
+  return {
+    scoreThreshold: IMPORTANT_SCORE_THRESHOLD,
+    topSignals,
+    history,
+  };
+};
+
+const readSidePanelHistoryFromDb = async () => {
+  if (!pool) {
+    return { scoreThreshold: IMPORTANT_SCORE_THRESHOLD, topSignals: [], history: [] };
+  }
+
+  const result = await pool.query(
+    `
+      WITH ranked AS (
+        SELECT
+          s.name as source_name,
+          a.title,
+          a.article_url,
+          a.published_at,
+          a.last_seen_at,
+          a.relevance_score,
+          ROW_NUMBER() OVER (
+            PARTITION BY s.name, a.article_url
+            ORDER BY a.last_seen_at DESC, a.id DESC
+          ) as rn
+        FROM source_articles a
+        JOIN monitored_sources s ON s.id = a.source_id
+      )
+      SELECT source_name, title, article_url, published_at, last_seen_at, relevance_score
+      FROM ranked
+      WHERE rn = 1
+      ORDER BY last_seen_at DESC
+      LIMIT $1
+    `,
+    [SIDE_PANEL_HISTORY_LIMIT],
+  );
+
+  const mapped = result.rows.map((row) => ({
+    sourceName: row.source_name,
+    latestTitle: row.title,
+    latestUrl: row.article_url,
+    latestPublishedAt: row.published_at,
+    lastSeenAt: row.last_seen_at,
+    relevanceScore: row.relevance_score,
+  }));
+
+  return buildSidePanelDataFromRows(mapped);
 };
 
 const buildRunSummary = (rows, mode) => {
@@ -981,11 +1081,20 @@ const runNewsMonitoring = async ({ testMode }) => {
       if (!sourceId) continue;
 
       const existing = await pool.query(
-        `SELECT id, title FROM source_articles WHERE source_id = $1 AND title = $2 LIMIT 1`,
-        [sourceId, latest.title],
+        `SELECT id, title, article_url
+         FROM source_articles
+         WHERE source_id = $1
+           AND (
+             article_url = $2
+             OR title = $3
+           )
+         ORDER BY last_seen_at DESC
+         LIMIT 1`,
+        [sourceId, latest.url, latest.title],
       );
 
-      const isNew = testMode ? false : existing.rowCount === 0;
+      const sameUrl = existing.rows[0]?.article_url === latest.url;
+      const isNew = testMode ? false : !sameUrl;
       pushStep(`Lecture du contenu article ${source.name}`);
       const articleRawText = await fetchArticleRawText(latest.url);
       const articleContext = await fetchArticleContext(latest.url);
@@ -1011,7 +1120,7 @@ const runNewsMonitoring = async ({ testMode }) => {
       if (existing.rowCount > 0) {
         await pool.query(
           `UPDATE source_articles
-           SET last_seen_at = NOW(), summary = $2, detailed_summary = $3, key_figures = $4, hallucination_check = $5, article_url = $6, relevance = $7, relevance_score = $8, relevance_reason = $9, relevance_explain = $10
+           SET title = $11, last_seen_at = NOW(), summary = $2, detailed_summary = $3, key_figures = $4, hallucination_check = $5, article_url = $6, relevance = $7, relevance_score = $8, relevance_reason = $9, relevance_explain = $10
            WHERE id = $1`,
           [
             existing.rows[0].id,
@@ -1024,6 +1133,7 @@ const runNewsMonitoring = async ({ testMode }) => {
             analysis.relevanceScore,
             analysis.relevanceReason,
             JSON.stringify(analysis.relevanceExplain || {}),
+            latest.title,
           ],
         );
       } else {
@@ -1105,6 +1215,7 @@ const runNewsMonitoring = async ({ testMode }) => {
     sourceCompany,
     strategicSummary,
     brief2Min: buildBrief2Min(processed),
+    sidePanel: await readSidePanelHistoryFromDb(),
     sources: processed,
   };
 };
@@ -1156,6 +1267,7 @@ const readDashboard = async () => {
     sourceCompany,
     strategicSummary: latestRun.rows[0]?.strategic_summary || 'Aucun run enregistré.',
     brief2Min: buildBrief2Min(mappedSources),
+    sidePanel: await readSidePanelHistoryFromDb(),
     sources: mappedSources,
   };
 };

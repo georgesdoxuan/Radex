@@ -1,12 +1,31 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { Fragment } from 'react';
-import { FiActivity, FiBell, FiCalendar, FiDatabase, FiExternalLink, FiEye, FiPlay, FiRefreshCw, FiSearch } from 'react-icons/fi';
+import { FiActivity, FiBell, FiCalendar, FiDatabase, FiExternalLink, FiEye, FiPlay, FiRefreshCw, FiSearch, FiSidebar } from 'react-icons/fi';
 
 type Report = {
   generatedAt: string;
   sourceCompany: string;
   brief2Min?: string[];
+  sidePanel?: {
+    scoreThreshold?: number;
+    topSignals?: {
+      sourceName: string;
+      title: string;
+      url: string;
+      publishedAt: string | null;
+      lastSeenAt: string | null;
+      relevanceScore: number;
+    }[];
+    history?: {
+      sourceName: string;
+      title: string;
+      url: string;
+      publishedAt: string | null;
+      lastSeenAt: string | null;
+      relevanceScore: number;
+    }[];
+  };
   sources: {
     sourceName: string;
     sourceUrl: string;
@@ -48,6 +67,11 @@ const emptyReport: Report = {
   generatedAt: '',
   sourceCompany: 'Extia',
   brief2Min: [],
+  sidePanel: {
+    scoreThreshold: 70,
+    topSignals: [],
+    history: [],
+  },
   sources: [],
   strategicSummary: '',
 };
@@ -200,6 +224,7 @@ function App() {
   const [sizeFilter, setSizeFilter] = useState('all');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [sidePanelOpen, setSidePanelOpen] = useState(true);
   const fetchJsonWithTimeout = async (url: string, init?: RequestInit, timeoutMs = 120000) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -226,6 +251,15 @@ function App() {
       sourceCompany: typeof obj.sourceCompany === 'string' ? obj.sourceCompany : 'Extia',
       strategicSummary: typeof obj.strategicSummary === 'string' ? obj.strategicSummary : '',
       brief2Min: Array.isArray(obj.brief2Min) ? obj.brief2Min.filter((item) => typeof item === 'string') : [],
+      sidePanel:
+        obj.sidePanel && typeof obj.sidePanel === 'object'
+          ? {
+              scoreThreshold:
+                typeof obj.sidePanel.scoreThreshold === 'number' ? obj.sidePanel.scoreThreshold : 70,
+              topSignals: Array.isArray(obj.sidePanel.topSignals) ? obj.sidePanel.topSignals : [],
+              history: Array.isArray(obj.sidePanel.history) ? obj.sidePanel.history : [],
+            }
+          : emptyReport.sidePanel,
       sources: Array.isArray(obj.sources) ? obj.sources : [],
     };
   };
@@ -411,6 +445,25 @@ function App() {
     return sectorOk && sizeOk && searchOk;
   });
 
+  const sideThreshold = report.sidePanel?.scoreThreshold ?? 70;
+  const fallbackTopSignals = report.sources
+    .map((source) => ({
+      sourceName: source.sourceName,
+      title: source.latestTitle,
+      url: source.latestUrl,
+      publishedAt: source.latestPublishedAt,
+      lastSeenAt: source.lastSeenAt,
+      relevanceScore:
+        typeof source.relevanceScore === 'number' && source.relevanceScore > 0
+          ? source.relevanceScore
+          : fallbackScoreFromLevel(source.relevance),
+    }))
+    .filter((item) => item.relevanceScore >= sideThreshold)
+    .sort((a, b) => b.relevanceScore - a.relevanceScore)
+    .slice(0, 8);
+  const topSignals = (report.sidePanel?.topSignals?.length ? report.sidePanel.topSignals : fallbackTopSignals).slice(0, 8);
+  const historySignals = (report.sidePanel?.history || []).slice(0, 40);
+
   return (
     <main className="layout">
       <header className="header">
@@ -436,6 +489,10 @@ function App() {
           <button onClick={() => runAnalysis('test')} disabled={runningMode !== null}>
             <FiEye />
             {runningMode === 'test' ? 'Mode test...' : 'Mode test (dernier article)'}
+          </button>
+          <button onClick={() => setSidePanelOpen((prev) => !prev)}>
+            <FiSidebar />
+            {sidePanelOpen ? 'Masquer panneau' : 'Ouvrir panneau'}
           </button>
         </div>
       </header>
@@ -692,6 +749,48 @@ function App() {
           </tbody>
         </table>
       </section>
+
+      {sidePanelOpen ? (
+        <aside className="side-panel">
+          <section className="card">
+            <h3>Actus critiques</h3>
+            <p>Seuil auto: score &gt;= {sideThreshold}</p>
+            <ul className="side-list">
+              {topSignals.length ? (
+                topSignals.map((item) => (
+                  <li key={`${item.sourceName}-${item.url}`} className="side-list-item">
+                    <p className="side-list-title">{item.sourceName} - {item.title}</p>
+                    <p className="side-list-meta">Score {Math.round(item.relevanceScore)} | {formatDateTime(item.publishedAt || item.lastSeenAt)}</p>
+                    <a href={item.url} target="_blank" rel="noreferrer">
+                      Ouvrir l&apos;article
+                    </a>
+                  </li>
+                ))
+              ) : (
+                <li className="side-list-item">Aucune actu au-dessus du seuil pour le moment.</li>
+              )}
+            </ul>
+          </section>
+          <section className="card">
+            <h3>Historique (sans doublons)</h3>
+            <ul className="side-list">
+              {historySignals.length ? (
+                historySignals.map((item) => (
+                  <li key={`history-${item.sourceName}-${item.url}`} className="side-list-item">
+                    <p className="side-list-title">{item.sourceName} - {item.title}</p>
+                    <p className="side-list-meta">{formatDateTime(item.publishedAt || item.lastSeenAt)}</p>
+                    <a href={item.url} target="_blank" rel="noreferrer">
+                      Voir
+                    </a>
+                  </li>
+                ))
+              ) : (
+                <li className="side-list-item">Pas encore d&apos;historique.</li>
+              )}
+            </ul>
+          </section>
+        </aside>
+      ) : null}
     </main>
   );
 }
