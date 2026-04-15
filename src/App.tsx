@@ -546,7 +546,6 @@ function App() {
       <header className="header">
         <div>
           <h1 className="brand-title">
-            <img src="/radex-logo.png" alt="Radex logo" className="brand-logo" />
             <strong>Radex</strong>
           </h1>
         </div>
@@ -575,10 +574,10 @@ function App() {
         <section className="card side-inline-card">
           <h3>Actus critiques</h3>
           <p>Seuil auto: score &gt;= {sideThreshold}</p>
-          <ul className="side-list">
+          <div className="side-list">
             {topSignals.length ? (
               topSignals.map((item) => (
-                <li key={`${item.sourceName}-${item.url}`} className="side-list-item">
+                <article key={`${item.sourceName}-${item.url}`} className="side-list-item">
                   <p className="side-list-title">{item.sourceName} - {item.title}</p>
                   <p className="side-list-meta">
                     Score {Math.round(item.relevanceScore)} | {formatDateTime(item.publishedAt || item.lastSeenAt)}
@@ -586,32 +585,32 @@ function App() {
                   <a href={item.url} target="_blank" rel="noreferrer">
                     Ouvrir l&apos;article
                   </a>
-                </li>
+                </article>
               ))
             ) : (
-              <li className="side-list-item">Aucune actu au-dessus du seuil pour le moment.</li>
+              <article className="side-list-item">Aucune actu au-dessus du seuil pour le moment.</article>
             )}
-          </ul>
+          </div>
         </section>
       ) : null}
       {sidebarView === 'history' ? (
         <section className="card side-inline-card">
           <h3>Historique (sans doublons)</h3>
-          <ul className="side-list">
+          <div className="side-list">
             {historySignals.length ? (
               historySignals.map((item) => (
-                <li key={`history-${item.sourceName}-${item.url}`} className="side-list-item">
+                <article key={`history-${item.sourceName}-${item.url}`} className="side-list-item">
                   <p className="side-list-title">{item.sourceName} - {item.title}</p>
                   <p className="side-list-meta">{formatDateTime(item.publishedAt || item.lastSeenAt)}</p>
                   <a href={item.url} target="_blank" rel="noreferrer">
                     Voir
                   </a>
-                </li>
+                </article>
               ))
             ) : (
-              <li className="side-list-item">Pas encore d&apos;historique.</li>
+              <article className="side-list-item">Pas encore d&apos;historique.</article>
             )}
-          </ul>
+          </div>
         </section>
       ) : null}
       {runningMode !== null ? (
