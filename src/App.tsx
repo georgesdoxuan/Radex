@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { Fragment } from 'react';
 import {
   FiActivity,
-  FiBarChart2,
   FiBell,
   FiCalendar,
   FiCheckSquare,
@@ -84,7 +83,7 @@ const emptyReport: Report = {
   sourceCompany: 'Extia',
   brief2Min: [],
   sidePanel: {
-    scoreThreshold: 30,
+    scoreThreshold: 50,
     topSignals: [],
     history: [],
   },
@@ -272,7 +271,7 @@ function App() {
         obj.sidePanel && typeof obj.sidePanel === 'object'
           ? {
               scoreThreshold:
-                typeof obj.sidePanel.scoreThreshold === 'number' ? obj.sidePanel.scoreThreshold : 30,
+                typeof obj.sidePanel.scoreThreshold === 'number' ? obj.sidePanel.scoreThreshold : 50,
               topSignals: Array.isArray(obj.sidePanel.topSignals) ? obj.sidePanel.topSignals : [],
               history: Array.isArray(obj.sidePanel.history) ? obj.sidePanel.history : [],
             }
@@ -462,23 +461,39 @@ function App() {
     return sectorOk && sizeOk && searchOk;
   });
 
-  const sideThreshold = report.sidePanel?.scoreThreshold ?? 30;
-  const fallbackTopSignals = report.sources
-    .map((source) => ({
-      sourceName: source.sourceName,
-      title: source.latestTitle,
-      url: source.latestUrl,
-      publishedAt: source.latestPublishedAt,
-      lastSeenAt: source.lastSeenAt,
-      relevanceScore:
+  const sideThreshold = 50;
+  const criticalSources = report.sources.filter((source) => {
+    const score =
+      typeof source.relevanceScore === 'number' && source.relevanceScore > 0
+        ? source.relevanceScore
+        : fallbackScoreFromLevel(source.relevance);
+    return score >= sideThreshold;
+  });
+  const criticalBriefItems = criticalSources
+    .sort((a, b) => {
+      const scoreA =
+        typeof a.relevanceScore === 'number' && a.relevanceScore > 0
+          ? a.relevanceScore
+          : fallbackScoreFromLevel(a.relevance);
+      const scoreB =
+        typeof b.relevanceScore === 'number' && b.relevanceScore > 0
+          ? b.relevanceScore
+          : fallbackScoreFromLevel(b.relevance);
+      return scoreB - scoreA;
+    })
+    .slice(0, 5)
+    .map((source) => {
+      const score =
         typeof source.relevanceScore === 'number' && source.relevanceScore > 0
           ? source.relevanceScore
-          : fallbackScoreFromLevel(source.relevance),
-    }))
-    .filter((item) => item.relevanceScore >= sideThreshold)
-    .sort((a, b) => b.relevanceScore - a.relevanceScore)
-    .slice(0, 8);
-  const topSignals = (report.sidePanel?.topSignals?.length ? report.sidePanel.topSignals : fallbackTopSignals).slice(0, 8);
+          : fallbackScoreFromLevel(source.relevance);
+      const firstBullet =
+        source.summary
+          .split('\n')
+          .map((line) => line.replace(/^•\s*/, '').trim())
+          .find(Boolean) || source.latestTitle;
+      return `${source.sourceName} (${score}/100) : ${firstBullet}`;
+    });
   const fallbackHistorySignals = report.sources
     .map((source) => ({
       sourceName: source.sourceName,
@@ -495,6 +510,7 @@ function App() {
     .filter((item, index, arr) => arr.findIndex((candidate) => candidate.url === item.url) === index)
     .slice(0, 40);
   const historySignals = (report.sidePanel?.history?.length ? report.sidePanel.history : fallbackHistorySignals).slice(0, 40);
+  const tableSources = sidebarView === 'critical' ? criticalSources : filteredSources;
 
   return (
     <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
@@ -536,19 +552,10 @@ function App() {
             <FiCheckSquare />
             {!sidebarCollapsed ? <span>Historique</span> : null}
           </button>
-          <div className="sidebar-nav-item muted">
-            <FiBarChart2 />
-            {!sidebarCollapsed ? <span>Analytics</span> : null}
-          </div>
         </nav>
       </aside>
       <main className="layout">
       <header className="header">
-        <div>
-          <h1 className="brand-title">
-            <strong>Radex</strong>
-          </h1>
-        </div>
         <div className="actions">
           <button onClick={loadDashboard} disabled={loading}>
             <FiRefreshCw />
@@ -570,29 +577,6 @@ function App() {
       </header>
 
       {error ? <p className="error">Erreur: {error}</p> : null}
-      {sidebarView === 'critical' ? (
-        <section className="card side-inline-card">
-          <h3>Actus critiques</h3>
-          <p>Seuil auto: score &gt;= {sideThreshold}</p>
-          <div className="side-list">
-            {topSignals.length ? (
-              topSignals.map((item) => (
-                <article key={`${item.sourceName}-${item.url}`} className="side-list-item">
-                  <p className="side-list-title">{item.sourceName} - {item.title}</p>
-                  <p className="side-list-meta">
-                    Score {Math.round(item.relevanceScore)} | {formatDateTime(item.publishedAt || item.lastSeenAt)}
-                  </p>
-                  <a href={item.url} target="_blank" rel="noreferrer">
-                    Ouvrir l&apos;article
-                  </a>
-                </article>
-              ))
-            ) : (
-              <article className="side-list-item">Aucune actu au-dessus du seuil pour le moment.</article>
-            )}
-          </div>
-        </section>
-      ) : null}
       {sidebarView === 'history' ? (
         <section className="card side-inline-card">
           <h3>Historique (sans doublons)</h3>
@@ -648,33 +632,39 @@ function App() {
         </section>
       ) : null}
 
-      <section className="kpi-grid">
-        <article className="card">
-          <FiDatabase className="card-icon" />
-          <p>Entreprise cible</p>
-          <h2>{report.sourceCompany}</h2>
-        </article>
-        <article className="card">
-          <FiActivity className="card-icon" />
-          <p>Sources suivies</p>
-          <h2>{report.sources.length}</h2>
-        </article>
-        <article className="card">
-          <FiBell className="card-icon" />
-          <p>Nouveaux articles détectés</p>
-          <h2>{report.sources.filter((item) => item.isNew).length}</h2>
-        </article>
-        <article className="card">
-          <FiCalendar className="card-icon" />
-          <p>Dernière exécution</p>
-          <h2>{formatDateTime(report.generatedAt)}</h2>
-        </article>
-      </section>
+      {sidebarView !== 'critical' ? (
+        <section className="kpi-grid">
+          <article className="card">
+            <FiActivity className="card-icon" />
+            <p>Sources suivies</p>
+            <h2>{report.sources.length}</h2>
+          </article>
+          <article className="card">
+            <FiBell className="card-icon" />
+            <p>Nouveaux articles détectés</p>
+            <h2>{report.sources.filter((item) => item.isNew).length}</h2>
+          </article>
+          <article className="card">
+            <FiCalendar className="card-icon" />
+            <p>Dernière exécution</p>
+            <h2>{formatDateTime(report.generatedAt)}</h2>
+          </article>
+        </section>
+      ) : null}
 
       <section className="card brief-card">
-        <h3>Brief</h3>
+        <h3>{sidebarView === 'critical' ? 'Brief actus critiques' : 'Brief'}</h3>
+        {sidebarView === 'critical' ? <p>Seuil critique: score &gt;= {sideThreshold}</p> : null}
         <ul>
-          {(report.brief2Min?.length ? report.brief2Min : ['Aucun signal critique pour le moment.']).map((item) => {
+          {(
+            sidebarView === 'critical'
+              ? criticalBriefItems.length
+                ? criticalBriefItems
+                : ['Aucune actu critique (score >= 50) pour le moment.']
+              : report.brief2Min?.length
+                ? report.brief2Min
+                : ['Aucun signal critique pour le moment.']
+          ).map((item) => {
             const parsed = parseBriefItem(item);
             const ringColor = ringColorFromScore(parsed.score);
             const ringStyle = {
@@ -743,8 +733,13 @@ function App() {
               }}
             />
           </div>
-          <p>{filteredSources.length} source(s) affichée(s)</p>
+          <p>{tableSources.length} source(s) affichée(s)</p>
         </div>
+        {sidebarView === 'critical' ? (
+          <div className="table-section-title">
+            <strong>Tableau des actus critiques</strong>
+          </div>
+        ) : null}
         <table>
           <thead>
             <tr>
@@ -760,7 +755,7 @@ function App() {
             </tr>
           </thead>
           <tbody>
-            {filteredSources.map((source) => (
+            {tableSources.map((source) => (
               <Fragment key={source.sourceName}>
                 <tr>
                   <td className="company-name-cell">

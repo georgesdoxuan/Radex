@@ -41,7 +41,7 @@ const newsSources = [
 ];
 const REQUEST_TIMEOUT_MS = 25000;
 const MAX_BRIEF_POINTS = 5;
-const IMPORTANT_SCORE_THRESHOLD = Number(process.env.IMPORTANT_SCORE_THRESHOLD ?? 30);
+const IMPORTANT_SCORE_THRESHOLD = Number(process.env.IMPORTANT_SCORE_THRESHOLD ?? 50);
 const SIDE_PANEL_TOP_LIMIT = 8;
 const SIDE_PANEL_HISTORY_LIMIT = 60;
 const runStatus = {
@@ -91,6 +91,14 @@ const fallbackReport = () => ({
 });
 
 const normalizeText = (value) => value.replace(/\s+/g, ' ').trim();
+const sanitizeCompetitiveWording = (value) =>
+  normalizeText(
+    String(value || '')
+      .replace(/\bvis[-\s]*[àa]\s+vis\s+d['’]extia\b/gi, 'dans le contexte concurrentiel')
+      .replace(/\bpar rapport [àa]\s+extia\b/gi, 'par rapport au contexte concurrentiel')
+      .replace(/\bpour\s+extia\b/gi, 'pour l entreprise cible')
+      .replace(/\bextia\b/gi, "l'entreprise cible"),
+  );
 
 const sanitizeExplain = (value) => {
   const explain = value && typeof value === 'object' ? value : {};
@@ -171,9 +179,10 @@ const generateSummary = async (payload) => {
   const client = new OpenAI({ apiKey: key });
   const draftResponse = await client.responses.create({
     model: 'gpt-4.1-mini',
-    input: `Tu es analyste concurrentiel pour Extia.
+    input: `Tu es analyste veille business.
 Tu dois te baser UNIQUEMENT sur les informations ci-dessous.
-Objectif: scorer la MENACE/OPPORTUNITE CONCURRENTIELLE pour Extia (et non l'intérêt général de l'article).
+Objectif unique: scorer la pertinence strategique de cette info pour une equipe strategie business.
+Question a trancher: "Cette information concurrente est-elle importante a connaitre pour orienter la strategie ?"
 Réponds UNIQUEMENT en JSON valide avec ce format:
 {
   "bullets": ["", "", ""],
@@ -193,21 +202,22 @@ Règles:
 - si des chiffres pertinents existent dans la source, intègre-les directement dans les bullets
 - detailed_summary: 4 à 6 lignes max
 - key_figures: 3 à 8 éléments MAX, chaque élément doit EXPLIQUER le chiffre (format "92% : management perçu comme éthique")
-- relevance_score: score 0-100 de pertinence concurrentielle SPECIFIQUE à Extia, basé sur le contenu réel de l'article
-- relevance_reason: 1 phrase courte qui explique l'impact concurrentiel concret pour Extia
+- relevance_score: score 0-100 de pertinence strategique business (pas un score de qualite redactionnelle)
+- relevance_reason: 1 phrase courte: pourquoi c'est important (ou pas) pour orienter la strategie business
 - relevance_explain: mini-rubrique structurée avec:
-  * positive_signals: 1-3 signaux positifs
-  * negative_signals: 1-3 freins/limites
+  * positive_signals: 1-3 signaux strategiques (ce qui justifie de suivre l'info)
+  * negative_signals: 1-3 limites (ce qui reduit la valeur strategique)
   * evidence: 1-3 preuves factuelles provenant de l'article
 - Barème strict pour relevance_score:
-  * 0-20: communication générique corporate / marque employeur sans conséquence concurrentielle directe
-  * 21-45: signal faible, peu actionnable pour Extia
-  * 46-65: signal concurrentiel modéré (orientation de marché utile)
-  * 66-85: signal fort actionnable (client, contrat, offre différenciante, gain mesurable)
-  * 86-100: signal critique (mouvement stratégique majeur, acquisition, contrat structurant, rupture de positionnement)
+  * 0-20: bruit / communication generique sans valeur strategie
+  * 21-40: faible interet, peu decisionnel
+  * 41-60: utile a surveiller, impact possible
+  * 61-80: important pour ajuster priorites/offres/positionnement
+  * 81-100: critique pour la strategie (mouvement majeur, contrat structurant, acquisition, rupture)
 - IMPORTANT: ne donne PAS un score élevé à un simple article intéressant.
 - Un article purement thought leadership / expertise générale ("cloud, data, IA, cybersécurité") doit rester <= 35.
 - Les signaux RH, labels employeur, RSE doivent rester <= 40 sauf preuve d'impact business concurrentiel direct.
+- Ne mentionne pas explicitement "Extia" dans la sortie, sauf si c'est une citation directe de l'article.
 - n'invente rien
 
 Source: ${payload.sourceName}
@@ -253,7 +263,7 @@ Chiffres extraits automatiquement: ${(payload.figureInsights || []).join(' | ') 
 Entrée 1 = extrait article source.
 Entrée 2 = synthèse candidate.
 Corrige la synthèse pour supprimer toute affirmation non supportée par l'extrait.
-Recalcule relevance_score avec le barème strict donné, en évaluant UNIQUEMENT l'impact concurrentiel vis-à-vis d'Extia.
+Recalcule relevance_score avec le barème strict donné, en évaluant UNIQUEMENT la pertinence strategique business a connaitre.
 Réponds UNIQUEMENT en JSON valide:
 {
   "bullets": [""],
@@ -269,7 +279,8 @@ Réponds UNIQUEMENT en JSON valide:
   }
 }
 
-Rappel: "article intéressant" != "pertinent concurrentiellement pour Extia".
+Rappel: "article intéressant" != "important pour la strategie business".
+Ne mentionne pas explicitement "Extia" dans la sortie, sauf citation directe de l'article.
 Si pas d'impact business concurrentiel explicite, le score doit rester bas.
 
 Extrait source:
@@ -307,6 +318,7 @@ ${JSON.stringify(draft)}`,
 
   const bullets = Array.isArray(verified.bullets) ? verified.bullets.filter(Boolean).slice(0, 4) : [];
   const relevanceScore = normalizeScore(verified.relevance_score) ?? 35;
+  const explainSanitized = sanitizeExplain(verified.relevance_explain);
   return {
     summary: bullets.length ? bullets.map((b) => `• ${b}`).join('\n') : '• Synthèse indisponible.',
     detailedSummary:
@@ -320,9 +332,13 @@ ${JSON.stringify(draft)}`,
     relevanceScore,
     relevanceReason:
       typeof verified.relevance_reason === 'string' && verified.relevance_reason
-        ? normalizeText(verified.relevance_reason)
+        ? sanitizeCompetitiveWording(verified.relevance_reason)
         : 'Score IA calculé avec justification indisponible.',
-    relevanceExplain: sanitizeExplain(verified.relevance_explain),
+    relevanceExplain: {
+      positiveSignals: explainSanitized.positiveSignals.map(sanitizeCompetitiveWording),
+      negativeSignals: explainSanitized.negativeSignals.map(sanitizeCompetitiveWording),
+      evidence: explainSanitized.evidence.map(sanitizeCompetitiveWording),
+    },
   };
 };
 
