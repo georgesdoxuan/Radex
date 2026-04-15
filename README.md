@@ -20,8 +20,8 @@ Le front Vite tourne sur `http://localhost:5173` (ou `5174` si `5173` est deja p
 
 - Utiliser la connection string Postgres du projet Supabase.
 - Si le mot de passe contient des caracteres speciaux (`"`, `@`, `(`, etc.), il faut URL-encoder le mot de passe.
-- Exemple de format:
-  - `postgresql://postgres.<user>:<password-encode>@aws-0-eu-west-1.pooler.supabase.com:5432/postgres`
+- Ne pas committer de vraie URL de connexion dans le repo.
+- Renseigner `SUPABASE_DB_URL` uniquement via variables d'environnement locales (et Netlify pour la prod).
 
 Au demarrage, le serveur cree automatiquement les tables:
 - `monitored_sources`
