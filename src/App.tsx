@@ -163,6 +163,22 @@ const parseBriefItem = (item: string) => {
 };
 
 function App() {
+  const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+  const apiUrl = useCallback((path: string) => (apiBaseUrl ? `${apiBaseUrl}${path}` : path), [apiBaseUrl]);
+  const parseResponseSafely = async (response: Response) => {
+    const text = await response.text();
+    const contentType = response.headers.get('content-type') || '';
+    if (!text) return {};
+    if (!contentType.includes('application/json')) {
+      return { error: `Réponse API non JSON (HTTP ${response.status}). Vérifie VITE_API_BASE_URL.` };
+    }
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { error: `Réponse JSON invalide (HTTP ${response.status}).` };
+    }
+  };
+
   const [report, setReport] = useState<Report>(emptyReport);
   const [loading, setLoading] = useState(false);
   const [runningMode, setRunningMode] = useState<'manual' | 'test' | null>(null);
@@ -182,8 +198,8 @@ function App() {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(url, { ...(init || {}), signal: controller.signal });
-      const data = await response.json();
+      const response = await fetch(apiUrl(url), { ...(init || {}), signal: controller.signal });
+      const data = await parseResponseSafely(response);
       return { response, data };
     } finally {
       clearTimeout(timer);
@@ -212,8 +228,8 @@ function App() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/dashboard');
-      const data = await response.json();
+      const response = await fetch(apiUrl('/api/dashboard'));
+      const data = await parseResponseSafely(response);
       if (!response.ok) {
         throw new Error((data as { error?: string }).error || 'Erreur API dashboard');
       }
@@ -223,7 +239,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiUrl]);
 
   useEffect(() => {
     if (runningMode === null) {
@@ -233,11 +249,11 @@ function App() {
     let consecutiveFailures = 0;
     const poll = async () => {
       try {
-        const res = await fetch('/api/run-status');
+        const res = await fetch(apiUrl('/api/run-status'));
         if (!res.ok) {
           throw new Error(`run-status http ${res.status}`);
         }
-        const data = (await res.json()) as RunStatus;
+        const data = (await parseResponseSafely(res)) as RunStatus;
         if (!cancelled) {
           consecutiveFailures = 0;
           setRunStatus(data);
@@ -263,7 +279,7 @@ function App() {
       cancelled = true;
       clearInterval(id);
     };
-  }, [runningMode]);
+  }, [runningMode, apiUrl]);
 
   const runAnalysis = async (mode: 'manual' | 'test') => {
     setRunningMode(mode);
@@ -284,8 +300,8 @@ function App() {
       const timeoutMs = 5 * 60 * 1000;
       while (Date.now() - startedAt < timeoutMs) {
         await new Promise((resolve) => setTimeout(resolve, 900));
-        const jobRes = await fetch(`/api/run-jobs/${jobId}`);
-        const jobData = (await jobRes.json()) as {
+        const jobRes = await fetch(apiUrl(`/api/run-jobs/${jobId}`));
+        const jobData = (await parseResponseSafely(jobRes)) as {
           status?: string;
           error?: string;
           report?: unknown;

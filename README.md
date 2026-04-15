@@ -1,6 +1,6 @@
 # Radex SaaS
 
-Dashboard de veille concurrentielle centre sur les pages d'actualites des concurrents."féezvdujh
+Dashboard de veille concurrentielle centre sur les pages d'actualites des concurrents.
 
 ## Demarrage local
 
@@ -9,6 +9,7 @@ Dashboard de veille concurrentielle centre sur les pages d'actualites des concur
 2. Renseigner:
    - `OPENAI_API_KEY`
    - `SUPABASE_DB_URL`
+   - (en prod frontend) `VITE_API_BASE_URL` vers ton backend public
 3. Lancer:
    - `npm install`
    - `npm run dev`
