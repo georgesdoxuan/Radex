@@ -241,6 +241,7 @@ function App() {
   const [expandedSource, setExpandedSource] = useState<string | null>(null);
   const [sectorFilter, setSectorFilter] = useState('all');
   const [sizeFilter, setSizeFilter] = useState('all');
+  const [scoreFilter, setScoreFilter] = useState('all');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -501,7 +502,14 @@ function App() {
     const sizeOk = sizeFilter === 'all' || profile.size === sizeFilter;
     const query = searchQuery.trim().toLowerCase();
     const searchOk = !query || source.sourceName.toLowerCase().includes(query);
-    return sectorOk && sizeOk && searchOk;
+    const score = stableScore(source.relevanceScore);
+    const scoreOk =
+      scoreFilter === 'all' ||
+      (scoreFilter === 'gte70' && score >= 70) ||
+      (scoreFilter === '50to69' && score >= 50 && score <= 69) ||
+      (scoreFilter === '30to49' && score >= 30 && score <= 49) ||
+      (scoreFilter === 'lt30' && score < 30);
+    return sectorOk && sizeOk && searchOk && scoreOk;
   });
 
   const sideThreshold = 50;
@@ -634,17 +642,13 @@ function App() {
       ) : null}
       {runningMode !== null ? (
         <section className="card loader-card">
-          <div className="radar-loader" aria-label="Chargement en cours">
-            <div className="radar-ring ring-1" />
-            <div className="radar-ring ring-2" />
-            <div className="radar-ring ring-3" />
-            <div className="radar-sweep" />
-            <div className="radar-core">
-              <img src="/radex-logo.png" alt="" className="radar-core-logo" />
-            </div>
+          <div className="mini-radar-loader" aria-label="Chargement en cours">
+            <span className="mini-radar-ring" />
+            <span className="mini-radar-sweep" />
+            <span className="mini-radar-core" />
           </div>
-          <p className="loader-title">Analyse en cours...</p>
-          <p className="loader-subtitle">La moulinette IA scrape, vérifie et synthétise les actus.</p>
+          <p className="loader-title">Analyse en cours</p>
+          <p className="loader-subtitle">Scraping et scoring...</p>
         </section>
       ) : null}
       {runningMode !== null ? (
@@ -745,6 +749,16 @@ function App() {
                     {size}
                   </option>
                 ))}
+            </select>
+          </label>
+          <label>
+            Score de pertinence
+            <select value={scoreFilter} onChange={(e) => setScoreFilter(e.target.value)}>
+              <option value="all">Tous</option>
+              <option value="gte70">70 et plus</option>
+              <option value="50to69">50 a 69</option>
+              <option value="30to49">30 a 49</option>
+              <option value="lt30">Moins de 30</option>
             </select>
           </label>
           <div className={`company-search ${searchOpen ? 'open' : ''}`}>

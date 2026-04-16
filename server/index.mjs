@@ -101,6 +101,45 @@ const sanitizeCompetitiveWording = (value) =>
       .replace(/\bextia\b/gi, "l'entreprise cible"),
   );
 
+const calibrateStrategicScore = ({ score, title, summary, detailedSummary, keyFigures, explain }) => {
+  let calibrated = Number.isFinite(Number(score)) ? Number(score) : 35;
+  const text = `${title || ''} ${summary || ''} ${detailedSummary || ''} ${(keyFigures || []).join(' ')} ${
+    (explain?.positiveSignals || []).join(' ')
+  } ${(explain?.evidence || []).join(' ')}`.toLowerCase();
+
+  const hasHighBusinessSignal =
+    /\b(acquisition|rachat|fusion|merge|contrat|appel d'offres|partenariat stratégique|partenariat strategique|levée de fonds|levee de fonds|ouverture|implantation|expansion)\b/.test(
+      text,
+    );
+  const hasMeasuredImpact =
+    /\b(roi|marge|revenu|chiffre d'affaires|gain|réduction|reduction|productivité|productivite|coût|cout)\b/.test(
+      text,
+    ) && /\b\d{1,3}(?:[.,]\d+)?\s?%|\b\d+[.,]?\d*\s?(k|m|m€|ke|me)\b/i.test(text);
+  const hasStrongProductivityOrCostSignal =
+    /\b(productivité|productivite|gain|réduction|reduction|coût|cout|escalade|délai|delai)\b/.test(text) &&
+    /\b(1[5-9]|[2-9]\d)(?:[.,]\d+)?\s?%/.test(text);
+  const hasRoiSignal =
+    /\broi\b/.test(text) && /\b(positif|mesuré|mesure|production|déploiement|deploiement|pilot|pilote)\b/.test(text);
+  const isMostlyThoughtLeadership =
+    /\b(thought leadership|tribune|webinar|podcast|point de vue|tendance|décryptage|decryptage|vision)\b/.test(
+      text,
+    ) && !hasMeasuredImpact &&
+    !hasHighBusinessSignal;
+  const isEmployerBranding =
+    /\b(best workplace|great place to work|rse|marque employeur|qvt|certification rh|label)\b/.test(text) &&
+    !hasMeasuredImpact &&
+    !hasHighBusinessSignal;
+
+  if (hasHighBusinessSignal) calibrated = Math.max(calibrated, 62);
+  if (hasMeasuredImpact) calibrated = Math.max(calibrated, 55);
+  if (hasStrongProductivityOrCostSignal) calibrated = Math.max(calibrated, 58);
+  if (hasRoiSignal) calibrated = Math.max(calibrated, 60);
+  if (isMostlyThoughtLeadership) calibrated = Math.min(calibrated, 35);
+  if (isEmployerBranding) calibrated = Math.min(calibrated, 40);
+
+  return Math.max(0, Math.min(100, Math.round(calibrated)));
+};
+
 const sanitizeExplain = (value) => {
   const explain = value && typeof value === 'object' ? value : {};
   const toList = (input) =>
@@ -318,8 +357,16 @@ ${JSON.stringify(draft)}`,
   }
 
   const bullets = Array.isArray(verified.bullets) ? verified.bullets.filter(Boolean).slice(0, 4) : [];
-  const relevanceScore = normalizeScore(verified.relevance_score) ?? 35;
+  const rawScore = normalizeScore(verified.relevance_score) ?? 35;
   const explainSanitized = sanitizeExplain(verified.relevance_explain);
+  const relevanceScore = calibrateStrategicScore({
+    score: rawScore,
+    title: payload.title,
+    summary: bullets.join(' '),
+    detailedSummary: verified.detailed_summary,
+    keyFigures: Array.isArray(verified.key_figures) ? verified.key_figures.slice(0, 8) : [],
+    explain: explainSanitized,
+  });
   return {
     summary: bullets.length ? bullets.map((b) => `• ${b}`).join('\n') : '• Synthèse indisponible.',
     detailedSummary:
@@ -1336,6 +1383,14 @@ const readDashboard = async () => {
   `);
 
   const mappedSources = rows.rows.map((row) => ({
+    _score: calibrateStrategicScore({
+      score: Number.isFinite(Number(row.relevance_score)) ? Number(row.relevance_score) : 0,
+      title: row.title || '',
+      summary: row.summary || '',
+      detailedSummary: row.detailed_summary || '',
+      keyFigures: Array.isArray(row.key_figures) ? row.key_figures : [],
+      explain: sanitizeExplain(row.relevance_explain),
+    }),
     sourceName: row.source_name,
     sourceUrl: row.source_url,
     latestTitle: row.title || 'Aucun article enregistré',
@@ -1353,10 +1408,22 @@ const readDashboard = async () => {
     keyFigures: Array.isArray(row.key_figures) ? row.key_figures : [],
     hallucinationCheck: row.hallucination_check || 'N/A',
     relevance: row.relevance || 'low',
-    relevanceScore: Number.isFinite(Number(row.relevance_score)) ? Number(row.relevance_score) : 0,
+    relevanceScore: 0,
     relevanceReason: row.relevance_reason || 'Aucune justification disponible.',
     relevanceExplain: sanitizeExplain(row.relevance_explain),
-  }));
+  })).map((item) => {
+    const { _score, ...rest } = item;
+    return {
+    ...rest,
+    relevanceScore: _score,
+    relevance:
+      _score >= 70
+        ? 'high'
+        : _score >= 45
+          ? 'medium'
+          : 'low',
+  };
+  });
 
   return {
     generatedAt: latestRun.rows[0]?.created_at || new Date().toISOString(),

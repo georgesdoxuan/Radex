@@ -390,62 +390,41 @@ button:disabled {
   color: var(--text-soft);
 }
 
-.radar-loader {
+.mini-radar-loader {
+  width: 42px;
+  height: 42px;
   position: relative;
-  width: 74px;
-  height: 74px;
-  border-radius: 999px;
   display: grid;
   place-items: center;
-  background: transparent;
 }
 
-.radar-ring {
+.mini-radar-ring {
   position: absolute;
-  border: 1px solid color-mix(in oklab, var(--text-soft), #7f97cc 25%);
+  inset: 0;
   border-radius: 999px;
-  opacity: 0.55;
+  border: 1.5px solid color-mix(in oklab, var(--border-main), #8ea4d8 35%);
 }
 
-.ring-1 {
-  width: 56px;
-  height: 56px;
-}
-
-.ring-2 {
-  display: none;
-}
-
-.ring-3 {
-  display: none;
-}
-
-.radar-sweep {
+.mini-radar-sweep {
   position: absolute;
-  width: 62px;
-  height: 62px;
+  inset: 2px;
   border-radius: 999px;
-  background: conic-gradient(from 0deg, rgba(110, 137, 255, 0.9), rgba(110, 137, 255, 0.08) 42%, transparent 70%);
-  mask: radial-gradient(circle at center, transparent 21px, black 22px);
-  animation: radar-spin 1.2s linear infinite;
+  background: conic-gradient(
+    from 0deg,
+    rgba(111, 131, 204, 0.85),
+    rgba(111, 131, 204, 0.06) 38%,
+    transparent 65%
+  );
+  mask: radial-gradient(circle at center, transparent 11px, black 12px);
+  animation: mini-radar-spin 1s linear infinite;
 }
 
-.radar-core {
-  width: 22px;
-  height: 22px;
+.mini-radar-core {
+  width: 6px;
+  height: 6px;
   border-radius: 999px;
-  display: grid;
-  place-items: center;
-  background: color-mix(in oklab, var(--card-bg), #8ea3de 12%);
-  z-index: 2;
-}
-
-.radar-core-logo {
-  width: 12px;
-  height: 12px;
-  object-fit: contain;
-  filter: var(--logo-filter);
-  opacity: 0.8;
+  background: color-mix(in oklab, var(--text-soft), #8197cb 45%);
+  opacity: 0.9;
 }
 
 .steps-box {
@@ -825,7 +804,7 @@ th {
   }
 }
 
-@keyframes radar-spin {
+@keyframes mini-radar-spin {
   from {
     transform: rotate(0);
   }
