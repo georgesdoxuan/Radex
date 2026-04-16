@@ -1031,7 +1031,7 @@ const readSidePanelHistoryFromDb = async () => {
     latestUrl: row.article_url,
     latestPublishedAt: row.published_at,
     lastSeenAt: row.last_seen_at,
-    relevanceScore: row.relevance_score,
+    relevanceScore: Number.isFinite(Number(row.relevance_score)) ? Number(row.relevance_score) : 0,
   }));
 
   return buildSidePanelDataFromRows(mapped);
@@ -1274,7 +1274,7 @@ const readDashboard = async () => {
     keyFigures: Array.isArray(row.key_figures) ? row.key_figures : [],
     hallucinationCheck: row.hallucination_check || 'N/A',
     relevance: row.relevance || 'low',
-    relevanceScore: typeof row.relevance_score === 'number' ? row.relevance_score : 0,
+    relevanceScore: Number.isFinite(Number(row.relevance_score)) ? Number(row.relevance_score) : 0,
     relevanceReason: row.relevance_reason || 'Aucune justification disponible.',
     relevanceExplain: sanitizeExplain(row.relevance_explain),
   }));

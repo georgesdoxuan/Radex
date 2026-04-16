@@ -104,10 +104,10 @@ const sourceProfiles: Record<string, CompanyProfile> = {
   Wavestone: { sector: 'Conseil en transformation', size: 'ETI' },
 };
 
-const fallbackScoreFromLevel = (level?: 'low' | 'medium' | 'high') => {
-  if (level === 'high') return 82;
-  if (level === 'medium') return 58;
-  return 22;
+const stableScore = (value: unknown) => {
+  const score = Number(value);
+  if (!Number.isFinite(score)) return 0;
+  return Math.max(0, Math.min(100, Math.round(score)));
 };
 
 const ringColorFromScore = (score: number) => {
@@ -203,6 +203,9 @@ const parseBriefItem = (item: string) => {
 };
 
 function App() {
+  const isLocalRuntime =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
   const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
   const apiUrl = useCallback((path: string) => (apiBaseUrl ? `${apiBaseUrl}${path}` : path), [apiBaseUrl]);
   const parseResponseSafely = async (response: Response) => {
@@ -302,6 +305,34 @@ function App() {
     if (runningMode === null) {
       return;
     }
+    if (!isLocalRuntime) {
+      const scriptedSteps = [
+        'Initialisation du workflow...',
+        'Collecte des dernieres publications...',
+        'Lecture et extraction des signaux...',
+        'Scoring IA en cours...',
+        'Mise a jour du dashboard...',
+      ];
+      setRunStatus((prev) => ({
+        ...prev,
+        mode: runningMode,
+        steps: [`${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} - ${scriptedSteps[0]}`],
+      }));
+      let idx = 1;
+      const id = setInterval(() => {
+        const message = scriptedSteps[idx % scriptedSteps.length];
+        idx += 1;
+        setRunStatus((prev) => ({
+          ...prev,
+          mode: runningMode,
+          steps: [
+            ...prev.steps,
+            `${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} - ${message}`,
+          ].slice(-40),
+        }));
+      }, 3500);
+      return () => clearInterval(id);
+    }
     let cancelled = false;
     let consecutiveFailures = 0;
     const poll = async () => {
@@ -336,7 +367,7 @@ function App() {
       cancelled = true;
       clearInterval(id);
     };
-  }, [runningMode, apiUrl]);
+  }, [runningMode, apiUrl, isLocalRuntime]);
 
   const runAnalysis = async (mode: 'manual' | 'test') => {
     setRunningMode(mode);
@@ -364,10 +395,21 @@ function App() {
           ? '/.netlify/functions/run-analysis-background'
           : '/.netlify/functions/run-test-background';
 
-      const { response: bgResponse, data: bgData } = await fetchJsonWithTimeout(bgEndpoint, { method: 'POST' }, 45000);
-      if (bgResponse.ok || bgResponse.status === 202) {
-        await pollDashboardUntilUpdated();
-        return;
+      let bgData: unknown = {};
+      try {
+        const bgResult = await fetchJsonWithTimeout(bgEndpoint, { method: 'POST' }, 180000);
+        bgData = bgResult.data;
+        if (bgResult.response.ok || bgResult.response.status === 202) {
+          await pollDashboardUntilUpdated();
+          return;
+        }
+      } catch (err) {
+        const isAbort = err instanceof Error && err.name === 'AbortError';
+        if (isAbort) {
+          await pollDashboardUntilUpdated();
+          return;
+        }
+        throw err;
       }
 
       const endpoint = mode === 'manual' ? '/api/run-analysis' : '/api/run-test';
@@ -464,30 +506,18 @@ function App() {
 
   const sideThreshold = 50;
   const criticalSources = report.sources.filter((source) => {
-    const score =
-      typeof source.relevanceScore === 'number' && source.relevanceScore > 0
-        ? source.relevanceScore
-        : fallbackScoreFromLevel(source.relevance);
+    const score = stableScore(source.relevanceScore);
     return score >= sideThreshold;
   });
   const criticalBriefItems = criticalSources
     .sort((a, b) => {
-      const scoreA =
-        typeof a.relevanceScore === 'number' && a.relevanceScore > 0
-          ? a.relevanceScore
-          : fallbackScoreFromLevel(a.relevance);
-      const scoreB =
-        typeof b.relevanceScore === 'number' && b.relevanceScore > 0
-          ? b.relevanceScore
-          : fallbackScoreFromLevel(b.relevance);
+      const scoreA = stableScore(a.relevanceScore);
+      const scoreB = stableScore(b.relevanceScore);
       return scoreB - scoreA;
     })
     .slice(0, 5)
     .map((source) => {
-      const score =
-        typeof source.relevanceScore === 'number' && source.relevanceScore > 0
-          ? source.relevanceScore
-          : fallbackScoreFromLevel(source.relevance);
+      const score = stableScore(source.relevanceScore);
       const firstBullet =
         source.summary
           .split('\n')
@@ -502,10 +532,7 @@ function App() {
       url: source.latestUrl,
       publishedAt: source.latestPublishedAt,
       lastSeenAt: source.lastSeenAt,
-      relevanceScore:
-        typeof source.relevanceScore === 'number' && source.relevanceScore > 0
-          ? source.relevanceScore
-          : fallbackScoreFromLevel(source.relevance),
+      relevanceScore: stableScore(source.relevanceScore),
     }))
     .sort((a, b) => new Date(b.lastSeenAt || 0).getTime() - new Date(a.lastSeenAt || 0).getTime())
     .filter((item, index, arr) => arr.findIndex((candidate) => candidate.url === item.url) === index)
@@ -746,6 +773,7 @@ function App() {
             <tr>
               <th><span className="th-wrap"><FiDatabase />Source</span></th>
               <th><span className="th-wrap"><FiActivity />Dernier titre</span></th>
+              <th><span className="th-wrap"><FiCalendar />Date article</span></th>
               <th><span className="th-wrap"><FiExternalLink />Lien article</span></th>
               <th><span className="th-wrap"><FiBell />Nouveau</span></th>
               <th><span className="th-wrap"><FiPlay />Mode du dernier run</span></th>
@@ -763,6 +791,7 @@ function App() {
                     <span className="company-name-card">{source.sourceName}</span>
                   </td>
                   <td>{source.latestTitle}</td>
+                  <td>{formatDateTime(source.latestPublishedAt)}</td>
                   <td>
                     <a href={source.latestUrl} target="_blank" rel="noreferrer">
                       Ouvrir
@@ -778,9 +807,7 @@ function App() {
                   <td>
                     {(() => {
                       const score =
-                        typeof source.relevanceScore === 'number' && source.relevanceScore > 0
-                          ? source.relevanceScore
-                          : fallbackScoreFromLevel(source.relevance);
+                        stableScore(source.relevanceScore);
                       const ringColor = ringColorFromScore(score);
                       const ringStyle = {
                         background: `conic-gradient(${ringColor} ${Math.max(0, Math.min(100, score))}%, rgba(141, 156, 186, 0.25) 0)`,
@@ -816,7 +843,7 @@ function App() {
                 </tr>
                 {expandedSource === source.sourceName ? (
                   <tr>
-                    <td colSpan={9} className="details-row">
+                    <td colSpan={10} className="details-row">
                       <p>
                         <strong>Synthèse détaillée :</strong>{' '}
                         {renderEmphasizedText(source.detailedSummary || 'Non disponible', 4)}
