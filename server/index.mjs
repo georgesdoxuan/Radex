@@ -369,6 +369,17 @@ const isUsefulLink = (url, sourceUrl) => {
   return url.startsWith('http');
 };
 
+const looksLikeBotChallenge = (htmlOrText) => {
+  const text = String(htmlOrText || '').toLowerCase();
+  return (
+    text.includes('just a moment') ||
+    text.includes('performing security verification') ||
+    text.includes('requires captcha') ||
+    text.includes('cf-browser-verification') ||
+    text.includes('cloudflare')
+  );
+};
+
 const parseLatestArticle = (sourceName, sourceUrl, html) => {
   const $ = load(html);
   const candidates = [];
@@ -407,6 +418,22 @@ const parseLatestArticle = (sourceName, sourceUrl, html) => {
       const title = isUsefulTitle(anchorText) ? anchorText : cardTitle;
       const url = absoluteUrl(sourceUrl, $(el).attr('href'));
       if (isUsefulTitle(title) && isUsefulLink(url, sourceUrl)) {
+        candidates.push({ title, url });
+      }
+    });
+  } else if (sourceName === 'Alten') {
+    // Dedicated selectors for the ALTEN FR "News & Evenements" page.
+    $(
+      'main article a[href], main .news a[href], main .event a[href], main .card a[href], #evenements a[href], #news a[href]',
+    ).each((_, el) => {
+      const url = absoluteUrl(sourceUrl, $(el).attr('href'));
+      if (!isUsefulLink(url, sourceUrl)) return;
+      const loweredUrl = url.toLowerCase();
+      if (loweredUrl.includes('/contact') || loweredUrl.includes('/offres') || loweredUrl.includes('/jobs')) return;
+      const anchorText = normalizeText($(el).text());
+      const cardTitle = normalizeText($(el).closest('article, li, div').find('h2, h3, h4').first().text());
+      const title = isUsefulTitle(anchorText) ? anchorText : cardTitle;
+      if (isUsefulTitle(title)) {
         candidates.push({ title, url });
       }
     });
@@ -657,6 +684,29 @@ const parseWavestoneFromMirror = (mirrorText, sourceUrl) => {
   return { title: 'Aucun article exploitable détecté', url: sourceUrl };
 };
 
+const parseAltenFromMirror = (mirrorText, sourceUrl) => {
+  if (looksLikeBotChallenge(mirrorText)) {
+    return {
+      title: 'Source protegee anti-bot (Cloudflare)',
+      url: sourceUrl,
+    };
+  }
+
+  const markdownLinks = [...mirrorText.matchAll(/\[([^\]]+)\]\((https:\/\/www\.alten\.fr\/[^)]+)\)/gi)];
+  for (const match of markdownLinks) {
+    const title = normalizeText(match[1] || '');
+    const url = absoluteUrl(sourceUrl, match[2] || '');
+    if (!isUsefulLink(url, sourceUrl)) continue;
+    const loweredUrl = url.toLowerCase();
+    if (loweredUrl.includes('/contact') || loweredUrl.includes('/offres') || loweredUrl.includes('/jobs')) continue;
+    if (isUsefulTitle(title)) {
+      return { title, url };
+    }
+  }
+
+  return { title: 'Aucun article exploitable détecté', url: sourceUrl };
+};
+
 const fetchWithTimeout = async (url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -724,6 +774,27 @@ const fetchLatestFromSource = async (source) => {
     },
   }, REQUEST_TIMEOUT_MS, 2);
   const html = await response.text();
+  if (source.name === 'Alten' && (response.status === 403 || looksLikeBotChallenge(html))) {
+    pushStep('Fallback miroir Alten (site protege anti-bot)');
+    const mirrorResponse = await fetchWithRetry(
+      `https://r.jina.ai/http://${source.url.replace(/^https?:\/\//, '')}`,
+      { headers: { 'user-agent': 'Extia-Radar/1.0' } },
+      40000,
+      3,
+    );
+    const mirrorText = await mirrorResponse.text();
+    const latest = parseAltenFromMirror(mirrorText, source.url);
+    if (latest.title.toLowerCase().includes('source protegee anti-bot')) {
+      throw new Error('Source Alten protegee anti-bot (Cloudflare). Scraping serveur bloque.');
+    }
+    return {
+      ...latest,
+      sourceName: source.name,
+      sourceUrl: source.url,
+      publishedAt: null,
+    };
+  }
+
   let latest = parseLatestArticle(source.name, source.url, html);
 
   if (
@@ -1098,7 +1169,7 @@ const runNewsMonitoring = async ({ testMode }) => {
       if (!sourceId) continue;
 
       const existing = await pool.query(
-        `SELECT id, title, article_url
+        `SELECT id, title, article_url, published_at, summary, detailed_summary, key_figures, hallucination_check, relevance, relevance_score, relevance_reason, relevance_explain, last_seen_at
          FROM source_articles
          WHERE source_id = $1
            AND (
@@ -1112,6 +1183,29 @@ const runNewsMonitoring = async ({ testMode }) => {
 
       const sameUrl = existing.rows[0]?.article_url === latest.url;
       const isNew = testMode ? false : !sameUrl;
+      if (!testMode && existing.rowCount > 0 && !isNew) {
+        const row = existing.rows[0];
+        processed.push({
+          sourceName: source.name,
+          sourceUrl: source.url,
+          latestTitle: row.title || latest.title,
+          latestUrl: row.article_url || latest.url,
+          latestPublishedAt: row.published_at || latest.publishedAt,
+          lastRunMode: mode,
+          lastSeenAt: row.last_seen_at || new Date().toISOString(),
+          isNew: false,
+          summary: row.summary || 'Pas de résumé disponible.',
+          detailedSummary: row.detailed_summary || 'Pas de synthèse détaillée disponible.',
+          keyFigures: Array.isArray(row.key_figures) ? row.key_figures : [],
+          hallucinationCheck: row.hallucination_check || 'N/A',
+          relevance: row.relevance || 'low',
+          relevanceScore: Number.isFinite(Number(row.relevance_score)) ? Number(row.relevance_score) : 0,
+          relevanceReason: row.relevance_reason || 'Aucune justification disponible.',
+          relevanceExplain: sanitizeExplain(row.relevance_explain),
+        });
+        pushStep(`Article deja connu pour ${source.name}: aucun changement`);
+        continue;
+      }
       pushStep(`Lecture du contenu article ${source.name}`);
       const articleRawText = await fetchArticleRawText(latest.url);
       const articleContext = await fetchArticleContext(latest.url);
@@ -1134,26 +1228,7 @@ const runNewsMonitoring = async ({ testMode }) => {
       const fallbackFigures = filterRelevantFigures(figureInsights.length ? figureInsights : articleFigures);
       const mergedKeyFigures = aiFigures.length > 0 ? aiFigures : fallbackFigures;
 
-      if (existing.rowCount > 0) {
-        await pool.query(
-          `UPDATE source_articles
-           SET title = $11, last_seen_at = NOW(), summary = $2, detailed_summary = $3, key_figures = $4, hallucination_check = $5, article_url = $6, relevance = $7, relevance_score = $8, relevance_reason = $9, relevance_explain = $10
-           WHERE id = $1`,
-          [
-            existing.rows[0].id,
-            analysis.summary,
-            analysis.detailedSummary,
-            JSON.stringify(mergedKeyFigures),
-            analysis.hallucinationCheck,
-            latest.url,
-            analysis.relevance,
-            analysis.relevanceScore,
-            analysis.relevanceReason,
-            JSON.stringify(analysis.relevanceExplain || {}),
-            latest.title,
-          ],
-        );
-      } else {
+      if (!testMode && isNew) {
         await pool.query(
           `INSERT INTO source_articles(source_id, title, article_url, published_at, summary, detailed_summary, key_figures, hallucination_check, relevance, relevance_score, relevance_reason, relevance_explain)
            VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
