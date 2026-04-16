@@ -1248,7 +1248,7 @@ const readDashboard = async () => {
   );
 
   const rows = await pool.query(`
-    SELECT s.name as source_name, s.url as source_url, a.title, a.article_url, a.published_at, a.summary, a.detailed_summary, a.key_figures, a.hallucination_check, a.relevance, a.relevance_score, a.relevance_reason, a.relevance_explain, a.last_seen_at
+    SELECT s.name as source_name, s.url as source_url, a.title, a.article_url, a.published_at, a.summary, a.detailed_summary, a.key_figures, a.hallucination_check, a.relevance, a.relevance_score, a.relevance_reason, a.relevance_explain, a.last_seen_at, a.first_seen_at
     FROM monitored_sources s
     LEFT JOIN LATERAL (
       SELECT *
@@ -1268,7 +1268,11 @@ const readDashboard = async () => {
     latestPublishedAt: row.published_at,
     lastRunMode: latestRun.rows[0]?.mode || 'manual',
     lastSeenAt: row.last_seen_at || null,
-    isNew: false,
+    isNew:
+      latestRun.rows[0]?.mode === 'manual' &&
+      row.first_seen_at &&
+      latestRun.rows[0]?.created_at &&
+      new Date(row.first_seen_at).getTime() >= new Date(latestRun.rows[0].created_at).getTime(),
     summary: row.summary || 'Pas de résumé disponible.',
     detailedSummary: row.detailed_summary || 'Pas de synthèse détaillée disponible.',
     keyFigures: Array.isArray(row.key_figures) ? row.key_figures : [],

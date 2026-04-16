@@ -538,7 +538,14 @@ function App() {
     .filter((item, index, arr) => arr.findIndex((candidate) => candidate.url === item.url) === index)
     .slice(0, 40);
   const historySignals = (report.sidePanel?.history?.length ? report.sidePanel.history : fallbackHistorySignals).slice(0, 40);
-  const tableSources = sidebarView === 'critical' ? criticalSources : filteredSources;
+  const baseTableSources = sidebarView === 'critical' ? criticalSources : filteredSources;
+  const tableSources =
+    sidebarView === 'dashboard' && report.sources[0]?.lastRunMode === 'manual'
+      ? [...baseTableSources].sort((a, b) => {
+          if (a.isNew === b.isNew) return a.sourceName.localeCompare(b.sourceName, 'fr');
+          return a.isNew ? -1 : 1;
+        })
+      : baseTableSources;
 
   return (
     <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
