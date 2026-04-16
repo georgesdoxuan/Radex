@@ -54,4 +54,18 @@ Le endpoint `POST /api/cron/run` existe deja, mais tu peux rester en run manuel 
   - `OPENAI_API_KEY`
   - `SUPABASE_DB_URL`
   - `CRON_SECRET`
+  - `IMPORTANT_SCORE_THRESHOLD` (optionnel, defaut: `70`)
 - Ne pas definir `PORT` dans Netlify (peut declencher un faux positif du scanner de secrets).
+
+## Cron quotidien (cronjobs.org)
+
+Objectif: lancer un run chaque jour a 9h (Europe/Paris), puis alimenter le side panel:
+- `Actus critiques` = articles avec score >= `IMPORTANT_SCORE_THRESHOLD`
+- `Historique` = articles dedupliques (source + URL)
+
+Configuration cronjobs.org:
+- Method: `POST`
+- URL: `https://<ton-site>.netlify.app/api/cron/run`
+- Header: `x-cron-secret: <CRON_SECRET>`
+- Timezone: `Europe/Paris`
+- Schedule: tous les jours a `09:00`

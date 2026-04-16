@@ -56,18 +56,138 @@ body {
   min-height: 100vh;
 }
 
+.app-shell {
+  display: block;
+  min-height: 100vh;
+  width: 100%;
+  position: relative;
+  --sidebar-width: 220px;
+}
+
+.app-shell.sidebar-collapsed {
+  display: block;
+  --sidebar-width: 76px;
+}
+
+.app-sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: var(--sidebar-width);
+  height: 100vh;
+  border-right: 1px solid var(--border-main);
+  background: color-mix(in oklab, var(--card-bg), #b2c0e7 16%);
+  padding: 0.95rem 0.7rem 1rem;
+  display: grid;
+  align-content: start;
+  gap: 0.65rem;
+  overflow-y: auto;
+  transition: transform 220ms ease, width 220ms ease, padding 220ms ease, background-color 220ms ease;
+  z-index: 50;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.2rem 0.25rem 0.55rem;
+  border-bottom: 1px solid var(--border-main);
+  overflow: hidden;
+  transition: border-color 220ms ease;
+}
+
+.sidebar-brand strong {
+  font-size: 1.45rem;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 170ms ease, transform 170ms ease;
+}
+
+.sidebar-collapse-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  justify-self: start;
+  transition: transform 200ms ease, background-color 200ms ease;
+}
+
+.sidebar-nav {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.sidebar-nav-item {
+  width: 100%;
+  justify-content: flex-start;
+  border-radius: 12px;
+  padding: 0.7rem 0.72rem;
+  font-weight: 600;
+  min-height: 46px;
+  overflow: hidden;
+  transition: background-color 180ms ease, box-shadow 180ms ease, padding 180ms ease;
+}
+
+.sidebar-nav-item svg {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.sidebar-nav-item span {
+  white-space: nowrap;
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.sidebar-nav-item.active {
+  background: color-mix(in oklab, var(--button-bg), #9cb2ef 22%);
+  box-shadow: none;
+}
+
+.sidebar-nav-item.muted {
+  opacity: 0.82;
+  cursor: default;
+}
+
+.app-shell.sidebar-collapsed .sidebar-nav-item {
+  justify-content: center;
+}
+
+.app-shell.sidebar-collapsed .app-sidebar {
+  width: var(--sidebar-width);
+}
+
+.app-shell.sidebar-collapsed .sidebar-brand strong,
+.app-shell.sidebar-collapsed .sidebar-nav-item span {
+  opacity: 0;
+  transform: translateX(-6px);
+  pointer-events: none;
+}
+
+.app-shell.sidebar-collapsed .sidebar-collapse-btn {
+  transform: translateX(2px);
+}
+
 .layout {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 2rem;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 1.35rem 1.6rem 2rem calc(1.6rem + var(--sidebar-width));
   display: grid;
   gap: 1.25rem;
   animation: fade-in 260ms ease-out;
+  position: relative;
+  transition: padding 220ms ease;
 }
 
 .header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 1rem;
   align-items: end;
   flex-wrap: wrap;
@@ -406,6 +526,11 @@ button:disabled {
   color: var(--text-soft);
 }
 
+.table-section-title {
+  padding: 0.35rem 0.95rem 0.1rem;
+  color: var(--text-main);
+}
+
 .company-search {
   display: inline-flex;
   align-items: center;
@@ -612,6 +737,81 @@ th {
 .error {
   margin: 0;
   color: var(--error);
+}
+
+.side-inline-card {
+  max-width: 900px;
+}
+
+.side-list {
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.side-list-item {
+  border-radius: 12px;
+  padding: 0.72rem 0.78rem;
+  background: color-mix(in oklab, var(--card-bg), #9ab2e7 11%);
+  border: 1px solid color-mix(in oklab, var(--border-main), #8ea6df 28%);
+}
+
+.side-list-title {
+  margin: 0 0 0.26rem;
+  color: var(--text-main);
+  font-weight: 600;
+  font-size: 0.93rem;
+  line-height: 1.35;
+}
+
+.side-list-meta {
+  margin: 0 0 0.3rem;
+  color: var(--text-soft);
+  font-size: 0.84rem;
+}
+
+@media (max-width: 760px) {
+  .app-shell,
+  .app-shell.sidebar-collapsed {
+    display: block;
+  }
+
+  .app-sidebar {
+    width: 100%;
+    height: auto;
+    position: sticky;
+    z-index: 60;
+  }
+
+  .sidebar-brand {
+    border-bottom: none;
+    padding-bottom: 0.2rem;
+  }
+
+  .sidebar-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sidebar-nav-item {
+    justify-content: center;
+  }
+
+  .sidebar-nav-item span {
+    display: none;
+  }
+
+  .app-shell,
+  .app-shell.sidebar-collapsed,
+  .app-sidebar,
+  .layout {
+    transition: none;
+  }
+
+  .layout {
+    padding: 1.1rem 1rem 1.4rem;
+  }
 }
 
 @keyframes fade-in {
