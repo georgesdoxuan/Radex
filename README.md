@@ -1,6 +1,6 @@
 # Radex SaaS
 
-Dashboard de veille concurrentielle centre sur les pages d'actualites des concurrents.
+Dashboard de veille concurrentielle centre sur les pages d'actualites des concurrents.edscx
 
 ## Demarrage local
 
